@@ -505,6 +505,7 @@
             <select id="emp-role" required>
                 <option value="Agent">Agent</option>
                 <option value="AUM/UM">AUM/UM</option>
+                <option value="SUM">SUM</option>
                 <option value="BM">BM</option>
                 <option value="DM">DM</option>
                 <option value="DD">DD</option>
@@ -528,6 +529,7 @@
                 <option value="Meeting">Meeting</option>
             </select>
             <input type="number" id="penalty-minutes" placeholder="Late Minutes" min="0" required>
+            <p><strong>備註：No Show請輸入500</span></p>
             <button type="submit">Add 賀金</button>
         </form>
 
@@ -539,6 +541,7 @@
                     <th style="padding: 10px;">Name</th>
                     <th style="padding: 10px;">Code</th>
                     <th style="padding: 10px;">Role</th>
+                    <th style="padding: 10px;">Clubs & Awards</th>
                     <th style="padding: 10px;">Remaining Annual Leaves (Normal)</th>
                     <th style="padding: 10px;">Remaining Annual Leaves (黃金事假)</th>
                     <th style="padding: 10px;">Action</th>
@@ -594,10 +597,15 @@
         <h2>Agent Information</h2>
         <p><strong>Name:</strong> <span id="employee-name"></span></p>
         <p><strong>Code:</strong> <span id="employee-code"></span></p>
+        <p><strong>Role:</strong> <span id="employee-role"></span></p>
+        <p><strong>Clubs & Awards:</strong> <span id="employee-mdrt"></span></p>
         <p><strong>Annual Leaves (Normal):</strong> <span id="employee-leave-normal"></span></p>
         <p><strong>Annual Leaves (黃金事假):</strong> <span id="employee-leave-golden"></span></p>
         <p><strong>Remaining Annual Leaves (Normal):</strong> <span id="remaining-leave-normal"></span></p>
         <p><strong>Remaining Annual Leaves (黃金事假):</strong> <span id="remaining-leave-golden"></span></p>
+        <p><strong>Used Sick Leave Days:</strong> <span id="used-sick-leave">0</span></p>
+        <p><strong>Used 不可抗力因素 Days:</strong> <span id="used-force-majeure">0</span></p>
+        <p><strong>Used 離港 Days:</strong> <span id="used-overseas">0</span></p>
         <p><strong>備註：Annual Leaves (黃金事假)包含於Annual Leaves (Normal)之內</span></p>
 
         <!-- Update the leave application form -->
@@ -674,6 +682,10 @@
                 <tbody id="employee-penalty-list"></tbody>
             </table>
         </div>
+
+        <div id="penalty-total" style="text-align: right; margin-top: 10px; padding: 10px; background-color: #f8f9fa; border-radius: 4px;">
+            <strong>Total (Not Submitted): $<span id="penalty-sum">0</span></strong>
+        </div>
             
             <input type="file" id="proof-upload" accept="image/*" style="display: none;">
 
@@ -729,8 +741,146 @@
             .close-modal:hover {
                 color: #000;
             }
+            .remove-penalty-btn {
+                margin-left: 10px;
+                padding: 3px 8px;
+                background-color: #dc3545;
+                color: white;
+                border: none;
+                border-radius: 3px;
+                cursor: pointer;
+            }
+
+            .remove-penalty-btn:hover {
+                background-color: #c82333;
+            }
+            
+            .role-select,
+            .mdrt-select {
+                padding: 5px;
+                border: 1px solid var(--border-color);
+                border-radius: 4px;
+                background-color: white;
+                width: 100%;
+            }
+
+            .role-select:focus,
+            .mdrt-select:focus {
+                outline: none;
+                border-color: var(--accent-color);
+            }
         `;
         document.head.appendChild(styleSheet);    
+
+        // Add calculateDaysBetween function here
+        function calculateDaysBetween(startDate, endDate) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+            return Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+        }
+
+        function updateLeaveUsageCounts(employeeName) {
+            const savedEmployeeData = localStorage.getItem('employeeData');
+            if (savedEmployeeData) {
+                const employeeData = JSON.parse(savedEmployeeData);
+                const employee = employeeData.find(emp => emp.name === employeeName);
+                
+                if (employee && employee.applications) {
+                    let sickLeaveDays = 0;
+                    let forceMajeureDays = 0;
+                    let overseasDays = 0;
+
+                    employee.applications.forEach(application => {
+                        if (application.status === 'Approved') {
+                            const days = calculateDaysBetween(application.leaveStartDate, application.leaveEndDate);
+                            
+                            switch (application.leaveType) {
+                                case 'Sick Leave':
+                                    sickLeaveDays += days;
+                                    break;
+                                case '不可抗力因素':
+                                    forceMajeureDays += days;
+                                    break;
+                                case '離港':
+                                    overseasDays += days;
+                                    break;
+                            }
+                        }
+                    });
+
+                    // Save the counts to the employee data
+                    employee.leaveUsage = {
+                        sickLeaveDays,
+                        forceMajeureDays,
+                        overseasDays
+                    };
+
+                    // Save updated employee data back to localStorage
+                    localStorage.setItem('employeeData', JSON.stringify(employeeData));
+
+                    // Update the display
+                    document.getElementById('used-sick-leave').textContent = sickLeaveDays;
+                    document.getElementById('used-force-majeure').textContent = forceMajeureDays;
+                    document.getElementById('used-overseas').textContent = overseasDays;
+                }
+            }
+        }
+
+            // Add the new functions here
+            function updateEmployeeRole(selectElement) {
+                const row = selectElement.closest('tr');
+                const employeeName = row.cells[0].textContent;
+                const newRole = selectElement.value;
+                
+                // Update in localStorage
+                const savedEmployeeData = localStorage.getItem('employeeData');
+                if (savedEmployeeData) {
+                    const employeeData = JSON.parse(savedEmployeeData);
+                    const employee = employeeData.find(emp => emp.name === employeeName);
+                    if (employee) {
+                        employee.role = newRole;
+                        localStorage.setItem('employeeData', JSON.stringify(employeeData));
+                    }
+                }
+            }
+
+            function updateEmployeeMDRT(selectElement) {
+                const row = selectElement.closest('tr');
+                const employeeName = row.cells[0].textContent;
+                const newMDRT = selectElement.value;
+                
+                // Update in localStorage
+                const savedEmployeeData = localStorage.getItem('employeeData');
+                if (savedEmployeeData) {
+                    const employeeData = JSON.parse(savedEmployeeData);
+                    const employee = employeeData.find(emp => emp.name === employeeName);
+                    if (employee) {
+                        employee.empMDRT = newMDRT;
+                        
+                        // Calculate new leave amounts based on MDRT status
+                        let newLeaveNormal, newLeaveGolden;
+                        if (newMDRT === 'cot or above') {
+                            newLeaveNormal = '∞';
+                            newLeaveGolden = '∞';
+                        } else {
+                            newLeaveNormal = newMDRT === 'mdrt' ? 13 : 10;
+                            newLeaveGolden = 3;
+                        }
+                        
+                        // Update leave amounts
+                        employee.leaveNormal = newLeaveNormal;
+                        employee.leaveGolden = newLeaveGolden;
+                        employee.remainingLeaveNormal = newLeaveNormal;
+                        employee.remainingLeaveGolden = newLeaveGolden;
+                        
+                        // Update the row display
+                        row.cells[4].textContent = newLeaveNormal;
+                        row.cells[5].textContent = newLeaveGolden;
+                        
+                        localStorage.setItem('employeeData', JSON.stringify(employeeData));
+                    }
+                }
+            }
 
         const loginForm = document.getElementById('login-form');
         const adminPage = document.getElementById('admin-page');
@@ -880,6 +1030,7 @@
                     if (employeeRow) {
                         employeeName.textContent = employeeRow.name;
                         employeeCode.textContent = employeeRow.code;
+                        document.getElementById('employee-mdrt').textContent = employeeRow.empMDRT.toUpperCase();
                         
                         document.getElementById('employee-leave-normal').textContent = employeeRow.leaveNormal;
                         document.getElementById('employee-leave-golden').textContent = employeeRow.leaveGolden;
@@ -888,6 +1039,16 @@
                             employeeRow.remainingLeaveNormal !== undefined ? employeeRow.remainingLeaveNormal : employeeRow.leaveNormal;
                         document.getElementById('remaining-leave-golden').textContent = 
                             employeeRow.remainingLeaveGolden !== undefined ? employeeRow.remainingLeaveGolden : employeeRow.leaveGolden;
+
+                        // Add the leave usage display code here
+                        if (employeeRow.leaveUsage) {
+                            document.getElementById('used-sick-leave').textContent = employeeRow.leaveUsage.sickLeaveDays;
+                            document.getElementById('used-force-majeure').textContent = employeeRow.leaveUsage.forceMajeureDays;
+                            document.getElementById('used-overseas').textContent = employeeRow.leaveUsage.overseasDays;
+                        } else {
+                            // Initialize counts if they don't exist
+                            updateLeaveUsageCounts(employeeRow.name);
+                        }
 
                         // Load employee's penalties
                         loadEmployeePenalties(employeeRow.name);
@@ -956,25 +1117,47 @@
                 return;
             }
 
-            const totalLeaveNormal = empMDRT === 'mdrt' ? 13 : 10;
-            const totalLeaveGolden = 3;
+            let totalLeaveNormal, totalLeaveGolden;
+            if (empMDRT === 'cot or above') {
+                totalLeaveNormal = '∞';
+                totalLeaveGolden = '∞';
+            } else {
+                totalLeaveNormal = empMDRT === 'mdrt' ? 13 : 10;
+                totalLeaveGolden = 3;
+            }
 
-        // Create a new table row for the employee
-        const newRow = document.createElement('tr');
-        newRow.innerHTML = `
-            <td>${empName}</td>
-            <td>${empCode}</td>
-            <td>${empRole}</td>
-            <td>${totalLeaveNormal}</td>
-            <td>${totalLeaveGolden}</td>
-            <td><button class="remove-btn">Remove</button></td>
-        `;
+            // Create a new table row for the employee with MDRT status
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>${empName}</td>
+                <td>${empCode}</td>
+                <td>
+                    <select class="role-select" onchange="updateEmployeeRole(this)">
+                        <option value="Agent" ${empRole === 'Agent' ? 'selected' : ''}>Agent</option>
+                        <option value="AUM/UM" ${empRole === 'AUM/UM' ? 'selected' : ''}>AUM/UM</option>
+                        <option value="SUM" ${empRole === 'SUM' ? 'selected' : ''}>SUM</option>
+                        <option value="BM" ${empRole === 'BM' ? 'selected' : ''}>BM</option>
+                        <option value="DM" ${empRole === 'DM' ? 'selected' : ''}>DM</option>
+                        <option value="DD" ${empRole === 'DD' ? 'selected' : ''}>DD</option>
+                    </select>
+                </td>
+                <td>
+                    <select class="mdrt-select" onchange="updateEmployeeMDRT(this)">
+                        <option value="no" ${empMDRT === 'no' ? 'selected' : ''}>NO</option>
+                        <option value="mdrt" ${empMDRT === 'mdrt' ? 'selected' : ''}>MDRT</option>
+                        <option value="cot or above" ${empMDRT === 'cot or above' ? 'selected' : ''}>COT or above</option>
+                    </select>
+                </td>
+                <td>${totalLeaveNormal}</td>
+                <td>${totalLeaveGolden}</td>
+                <td><button class="remove-btn">Remove</button></td>
+            `;
 
             // Append the new row to the employee list
             const employeeList = document.getElementById('employee-list');
             employeeList.appendChild(newRow);
 
-            // Save the employee data with initial remaining leave values
+            // Save the employee data with MDRT status
             const newEmployee = {
                 name: empName,
                 code: empCode,
@@ -984,7 +1167,12 @@
                 leaveGolden: totalLeaveGolden,
                 remainingLeaveNormal: totalLeaveNormal,
                 remainingLeaveGolden: totalLeaveGolden,
-                applications: []
+                applications: [],
+                leaveUsage: {
+                    sickLeaveDays: 0,
+                    forceMajeureDays: 0,
+                    overseasDays: 0
+                }
             };
 
             // Get existing employee data or create new array
@@ -1040,18 +1228,35 @@
         // Add this function to load penalties for a specific employee
         function loadEmployeePenalties(employeeName) {
             const employeePenaltyList = document.getElementById('employee-penalty-list');
-            if (!employeePenaltyList) return;
+            const penaltySumElement = document.getElementById('penalty-sum');
+            if (!employeePenaltyList || !penaltySumElement) return;
 
             employeePenaltyList.innerHTML = '';
+            let totalPenalty = 0;
 
             const savedPenalties = localStorage.getItem('penaltyData');
             if (savedPenalties) {
                 const penalties = JSON.parse(savedPenalties);
                 const employeePenalties = penalties.filter(penalty => penalty.employeeName === employeeName);
 
+                if (employeePenalties.length === 0) {
+                    const emptyRow = document.createElement('tr');
+                    emptyRow.innerHTML = `
+                        <td colspan="6" style="text-align: center;">No penalties found</td>
+                    `;
+                    employeePenaltyList.appendChild(emptyRow);
+                    penaltySumElement.textContent = '0';
+                    return;
+                }
+
                 employeePenalties.forEach((penalty, index) => {
                     const isPast = isPastDeadline(penalty.deadline);
                     const finalAmount = isPast ? penalty.amount * 2 : penalty.amount;
+
+                    // Add to total if not submitted
+                    if (!penalty.submitted) {
+                        totalPenalty += finalAmount;
+                    }
 
                     const newRow = document.createElement('tr');
                     newRow.innerHTML = `
@@ -1073,6 +1278,9 @@
                     }
                     employeePenaltyList.appendChild(newRow);
                 });
+
+                // Update the total display
+                penaltySumElement.textContent = totalPenalty;
 
                 // Add event listeners to submit buttons
                 document.querySelectorAll('.submit-proof-btn').forEach(button => {
@@ -1117,42 +1325,43 @@
                 penaltyToUpdate.proofImage = proofImage;
                 localStorage.setItem('penaltyData', JSON.stringify(savedPenalties));
                 
-                // Refresh the display
+                // Refresh the display and recalculate total
                 loadEmployeePenalties(employeeName);
             }
         }
 
-        // Update the refreshPenaltyTable function for admin view to show proof images
         function refreshPenaltyTable(penalties) {
-            const penaltyList = document.getElementById('penalty-list');
-            penaltyList.innerHTML = '';
+        const penaltyList = document.getElementById('penalty-list');
+        penaltyList.innerHTML = '';
+        
+        penalties.forEach((penalty, index) => {
+            const isPast = isPastDeadline(penalty.deadline);
+            const finalAmount = isPast ? penalty.amount * 2 : penalty.amount;
             
-            penalties.forEach(penalty => {
-                const isPast = isPastDeadline(penalty.deadline);
-                const finalAmount = isPast ? penalty.amount * 2 : penalty.amount;
-                
-                const newRow = document.createElement('tr');
-                newRow.innerHTML = `
-                    <td>${penalty.employeeName} ${penalty.role ? `(${penalty.role})` : ''}</td>
-                    <td>${penalty.date}</td>
-                    <td>${penalty.reason}</td>
-                    <td>${penalty.lateMinutes === 'No Show' ? 'No Show' : penalty.lateMinutes}</td>
-                    <td>$${finalAmount}${isPast ? ' (Doubled)' : ''}</td>
-                    <td>${penalty.deadline}</td>
-                    <td>
-                        ${penalty.submitted ? 
-                            `<span class="status-submitted">Submitted</span>
-                            <button class="view-proof-btn" onclick="viewProof('${penalty.proofImage}')">View Proof</button>` : 
-                            '<span class="status-not-submitted">Not Submitted</span>'
-                        }
-                    </td>
-                `;
-                if (isPast) {
-                    newRow.style.backgroundColor = '#ffebee';
-                }
-                penaltyList.appendChild(newRow);
-            });
-        }
+            const newRow = document.createElement('tr');
+            newRow.innerHTML = `
+                <td>${penalty.employeeName} ${penalty.role ? `(${penalty.role})` : ''}</td>
+                <td>${penalty.date}</td>
+                <td>${penalty.reason}</td>
+                <td>${penalty.lateMinutes === 'No Show' ? 'No Show' : penalty.lateMinutes}</td>
+                <td>$${finalAmount}${isPast ? ' (Doubled)' : ''}</td>
+                <td>${penalty.deadline}</td>
+                <td>
+                    ${penalty.submitted ? 
+                        `<span class="status-submitted">Submitted</span>
+                        <button class="view-proof-btn" onclick="viewProof('${penalty.proofImage}')">View Proof</button>
+                        <button class="reject-penalty-btn" data-index="${index}">Reject</button>` : 
+                        '<span class="status-not-submitted">Not Submitted</span>'
+                    }
+                    <button class="remove-penalty-btn" data-penalty-index="${index}">Remove</button>
+                </td>
+            `;
+            if (isPast) {
+                newRow.style.backgroundColor = '#ffebee';
+            }
+            penaltyList.appendChild(newRow);
+        });
+    }
 
         // Add function to view proof image
         function viewProof(proofImage) {
@@ -1195,37 +1404,60 @@
             return today > deadlineDate;
         }
 
-        // Add this new function to refresh the penalty table
-        function refreshPenaltyTable(penalties) {
-            const penaltyList = document.getElementById('penalty-list');
-            penaltyList.innerHTML = '';
-            
-            penalties.forEach(penalty => {
-                const isPast = isPastDeadline(penalty.deadline);
-                const finalAmount = isPast ? penalty.amount * 2 : penalty.amount;
-                
-                const newRow = document.createElement('tr');
-                newRow.innerHTML = `
-                    <td>${penalty.employeeName} ${penalty.role ? `(${penalty.role})` : ''}</td>
-                    <td>${penalty.date}</td>
-                    <td>${penalty.reason}</td>
-                    <td>${penalty.lateMinutes === 'No Show' ? 'No Show' : penalty.lateMinutes}</td>
-                    <td>$${finalAmount}${isPast ? ' (Doubled)' : ''}</td>
-                    <td>${penalty.deadline}</td>
-                    <td>
-                        ${penalty.submitted ? 
-                            `<span class="status-submitted">Submitted</span>
-                            <button class="view-proof-btn" onclick="viewProof('${penalty.proofImage}')">View Proof</button>` : 
-                            `<span class="status-not-submitted">Not Submitted</span>`
+        // Add event listener for removing penalties
+        document.addEventListener('click', function(event) {
+            if (event.target.classList.contains('remove-penalty-btn')) {
+                if (confirm('Are you sure you want to remove this penalty?')) {
+                    const index = parseInt(event.target.getAttribute('data-penalty-index'));
+                    
+                    // Get penalties from localStorage
+                    const savedPenalties = localStorage.getItem('penaltyData');
+                    if (savedPenalties) {
+                        const penalties = JSON.parse(savedPenalties);
+                        
+                        // Store the employee name before removing the penalty
+                        const employeeName = penalties[index].employeeName;
+                        
+                        // Remove the penalty
+                        penalties.splice(index, 1);
+                        
+                        // Save updated penalties back to localStorage
+                        localStorage.setItem('penaltyData', JSON.stringify(penalties));
+                        
+                        // Refresh both admin and employee penalty tables
+                        refreshPenaltyTable(penalties);
+                        
+                        // If we're in employee view and this is the current employee's penalty list
+                        const currentEmployeeName = document.getElementById('employee-name')?.textContent;
+                        if (currentEmployeeName === employeeName) {
+                            loadEmployeePenalties(employeeName);
                         }
-                    </td>
-                `;
-                if (isPast) {
-                    newRow.style.backgroundColor = '#ffebee';
+                    }
                 }
-                penaltyList.appendChild(newRow);
-            });
-        }
+            } else if (event.target.classList.contains('reject-penalty-btn')) {
+                if (confirm('Are you sure you want to reject this penalty submission?')) {
+                    const index = parseInt(event.target.getAttribute('data-index'));
+                    
+                    const savedPenalties = localStorage.getItem('penaltyData');
+                    if (savedPenalties) {
+                        const penalties = JSON.parse(savedPenalties);
+                        const employeeName = penalties[index].employeeName;
+                        
+                        penalties[index].submitted = false;
+                        penalties[index].proofImage = null;
+                        
+                        localStorage.setItem('penaltyData', JSON.stringify(penalties));
+                        
+                        refreshPenaltyTable(penalties);
+                        
+                        const currentEmployeeName = document.getElementById('employee-name')?.textContent;
+                        if (currentEmployeeName === employeeName) {
+                            loadEmployeePenalties(employeeName);
+                        }
+                    }
+                }
+            }
+        });
 
         // Function for viewing proof images
         function viewProof(proofImage) {
@@ -1394,17 +1626,18 @@
         function processLeaveApplication(applyDate, leaveStartDate, leaveEndDate, leaveType, proofDataUrl) {
             // Calculate leave days
             const leaveDays = Math.ceil((leaveEndDate - leaveStartDate) / (1000 * 60 * 60 * 24)) + 1;
-            const remainingLeaveNormal = parseInt(document.getElementById('remaining-leave-normal').textContent);
-            const remainingLeaveGolden = parseInt(document.getElementById('remaining-leave-golden').textContent);
+            const remainingLeaveNormal = document.getElementById('remaining-leave-normal').textContent;
+            const remainingLeaveGolden = document.getElementById('remaining-leave-golden').textContent;
 
-            // Check leave balance
+            // Check leave balance - skip check if unlimited leaves (∞)
             if (leaveType === 'Annual Leave (Normal)') {
-                if (leaveDays > remainingLeaveNormal) {
+                if (remainingLeaveNormal !== '∞' && leaveDays > parseInt(remainingLeaveNormal)) {
                     alert("Insufficient Annual Leave balance.");
                     return;
                 }
             } else if (leaveType === 'Annual Leave (黃金事假)') {
-                if (leaveDays > remainingLeaveGolden || leaveDays > remainingLeaveNormal) {
+                if ((remainingLeaveGolden !== '∞' && leaveDays > parseInt(remainingLeaveGolden)) || 
+                    (remainingLeaveNormal !== '∞' && leaveDays > parseInt(remainingLeaveNormal))) {
                     alert("Insufficient Leave balance.");
                     return;
                 }
@@ -1415,13 +1648,13 @@
                 const employeeData = JSON.parse(savedEmployeeData);
                 const loggedInEmployee = employeeData.find(employee => employee.name === employeeName.textContent);
                 if (loggedInEmployee) {
-                    // Update remaining leaves
-                    if (leaveType === 'Annual Leave (Normal)') {
-                        loggedInEmployee.remainingLeaveNormal = remainingLeaveNormal - leaveDays;
+                    // Update remaining leaves - only if not unlimited
+                    if (leaveType === 'Annual Leave (Normal)' && remainingLeaveNormal !== '∞') {
+                        loggedInEmployee.remainingLeaveNormal = parseInt(remainingLeaveNormal) - leaveDays;
                         document.getElementById('remaining-leave-normal').textContent = loggedInEmployee.remainingLeaveNormal;
-                    } else if (leaveType === 'Annual Leave (黃金事假)') {
-                        loggedInEmployee.remainingLeaveGolden = remainingLeaveGolden - leaveDays;
-                        loggedInEmployee.remainingLeaveNormal = remainingLeaveNormal - leaveDays;
+                    } else if (leaveType === 'Annual Leave (黃金事假)' && remainingLeaveGolden !== '∞') {
+                        loggedInEmployee.remainingLeaveGolden = parseInt(remainingLeaveGolden) - leaveDays;
+                        loggedInEmployee.remainingLeaveNormal = parseInt(remainingLeaveNormal) - leaveDays;
                         document.getElementById('remaining-leave-golden').textContent = loggedInEmployee.remainingLeaveGolden;
                         document.getElementById('remaining-leave-normal').textContent = loggedInEmployee.remainingLeaveNormal;
                     }
@@ -1438,6 +1671,9 @@
                         status: 'Approved',
                         proofDataUrl: proofDataUrl
                     };
+
+                    // Update leave usage counts after adding new application
+                    updateLeaveUsageCounts(loggedInEmployee.name);
 
                     // Add to employee's applications
                     loggedInEmployee.applications.push(newApplication);
@@ -1614,6 +1850,8 @@
                         statusCell.innerHTML = 'Rejected';
                     }
                 }
+                // Update leave usage counts after rejection
+                updateLeaveUsageCounts(employeeName);
             }
         });
 
@@ -1623,24 +1861,94 @@
             if (savedEmployeeData) {
                 const employeeData = JSON.parse(savedEmployeeData);
                 
-                // Clear existing rows
+                // Clear existing rows in employee list
                 const employeeList = document.getElementById('employee-list');
-                employeeList.innerHTML = '';
+                if (employeeList) {
+                    employeeList.innerHTML = '';
 
-                employeeData.forEach(employee => {
-                    const newRow = document.createElement('tr');
-                    newRow.innerHTML = `
-                        <td>${employee.name}</td>
-                        <td>${employee.code}</td>
-                        <td>${employee.role}</td>
-                        <td>${employee.remainingLeaveNormal !== undefined ? employee.remainingLeaveNormal : employee.leaveNormal}</td>
-                        <td>${employee.remainingLeaveGolden !== undefined ? employee.remainingLeaveGolden : employee.leaveGolden}</td>
-                        <td><button class="remove-btn">Remove</button></td>
-                    `;
-                    employeeList.appendChild(newRow);
-                });
+                    employeeData.forEach(employee => {
+                        const newRow = document.createElement('tr');
+                        newRow.innerHTML = `
+                            <td>${employee.name}</td>
+                            <td>${employee.code}</td>
+                            <td>
+                                <select class="role-select" onchange="updateEmployeeRole(this)">
+                                    <option value="Agent" ${employee.role === 'Agent' ? 'selected' : ''}>Agent</option>
+                                    <option value="AUM/UM" ${employee.role === 'AUM/UM' ? 'selected' : ''}>AUM/UM</option>
+                                    <option value="SUM" ${employee.role === 'SUM' ? 'selected' : ''}>SUM</option>
+                                    <option value="BM" ${employee.role === 'BM' ? 'selected' : ''}>BM</option>
+                                    <option value="DM" ${employee.role === 'DM' ? 'selected' : ''}>DM</option>
+                                    <option value="DD" ${employee.role === 'DD' ? 'selected' : ''}>DD</option>
+                                </select>
+                            </td>
+                            <td>
+                                <select class="mdrt-select" onchange="updateEmployeeMDRT(this)">
+                                    <option value="no" ${employee.empMDRT === 'no' ? 'selected' : ''}>NO</option>
+                                    <option value="mdrt" ${employee.empMDRT === 'mdrt' ? 'selected' : ''}>MDRT</option>
+                                    <option value="cot or above" ${employee.empMDRT === 'cot or above' ? 'selected' : ''}>COT or above</option>
+                                </select>
+                            </td>
+                            <td>${employee.remainingLeaveNormal !== undefined ? employee.remainingLeaveNormal : employee.leaveNormal}</td>
+                            <td>${employee.remainingLeaveGolden !== undefined ? employee.remainingLeaveGolden : employee.leaveGolden}</td>
+                            <td><button class="remove-btn">Remove</button></td>
+                        `;
+                        employeeList.appendChild(newRow);
+                    });
+                }
 
-                // Update the application list table
+                // Update logged in employee information if in employee view
+                const employeeName = document.getElementById('employee-name');
+                if (employeeName && employeeName.textContent) {
+                    const loggedInEmployee = employeeData.find(employee => employee.name === employeeName.textContent);
+                    if (loggedInEmployee) {
+                        document.getElementById('employee-code').textContent = loggedInEmployee.code;
+                        document.getElementById('employee-role').textContent = loggedInEmployee.role;
+                        document.getElementById('employee-mdrt').textContent = loggedInEmployee.empMDRT.toUpperCase();
+                        document.getElementById('employee-leave-normal').textContent = loggedInEmployee.leaveNormal;
+                        document.getElementById('employee-leave-golden').textContent = loggedInEmployee.leaveGolden;
+                        document.getElementById('remaining-leave-normal').textContent = 
+                            loggedInEmployee.remainingLeaveNormal !== undefined ? loggedInEmployee.remainingLeaveNormal : loggedInEmployee.leaveNormal;
+                        document.getElementById('remaining-leave-golden').textContent = 
+                            loggedInEmployee.remainingLeaveGolden !== undefined ? loggedInEmployee.remainingLeaveGolden : loggedInEmployee.leaveGolden;
+
+                        // Update leave usage counts
+                        if (loggedInEmployee.leaveUsage) {
+                            document.getElementById('used-sick-leave').textContent = loggedInEmployee.leaveUsage.sickLeaveDays;
+                            document.getElementById('used-force-majeure').textContent = loggedInEmployee.leaveUsage.forceMajeureDays;
+                            document.getElementById('used-overseas').textContent = loggedInEmployee.leaveUsage.overseasDays;
+                        }
+
+                        // Update application status table
+                        const applicationStatusTable = document.getElementById('application-status-table');
+                        if (applicationStatusTable && loggedInEmployee.applications) {
+                            // Keep the header row
+                            applicationStatusTable.innerHTML = `
+                                <tr>
+                                    <th>Apply Date</th>
+                                    <th>Leave Start Date</th>
+                                    <th>Leave End Date</th>
+                                    <th>Leave Type</th>
+                                    <th>Status</th>
+                                </tr>
+                            `;
+
+                            loggedInEmployee.applications.forEach(application => {
+                                const newRow = document.createElement('tr');
+                                newRow.setAttribute('data-employee', loggedInEmployee.name);
+                                newRow.innerHTML = `
+                                    <td>${application.applyDate}</td>
+                                    <td>${application.leaveStartDate}</td>
+                                    <td>${application.leaveEndDate}</td>
+                                    <td>${application.leaveType}</td>
+                                    <td>${application.status}</td>
+                                `;
+                                applicationStatusTable.appendChild(newRow);
+                            });
+                        }
+                    }
+                }
+
+                // Update the application list table in admin view
                 const applicationListBody = document.getElementById('application-list-body');
                 if (applicationListBody) {
                     applicationListBody.innerHTML = '';
@@ -1668,6 +1976,9 @@
                         }
                     });
                 }
+
+                // Initialize penalty section
+                initializePenaltySection();
             }
         });
 
