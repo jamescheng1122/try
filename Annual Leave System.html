@@ -479,7 +479,38 @@
             .view-proof-btn:hover {
                 background-color: #1976D2;
             }
+
+            .cancel-double-btn {
+            margin-left: 5px;
+            padding: 3px 8px;
+            background-color: #ff9800;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            }
+
+            .cancel-double-btn:hover {
+                background-color: #f57c00;
+            }
+
+            .export-btn {
+                background-color: #28a745;
+                color: white;
+                padding: 10px 20px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                margin-right: 10px;
+            }
+
+            .export-btn:hover {
+                background-color: #218838;
+            }
+
         </style>
+
+        <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
     </head>
 
     <body>
@@ -553,7 +584,10 @@
             </div>
 
             <!-- Update the employee application table -->
-            <h3>Agent Application Record</h3>
+            <h3>Agent Leave Application Record</h3>
+            <div class="export-buttons" style="margin-top: 20px;">
+                <button id="export-applications-btn" class="export-btn">Export Applications to Excel</button>
+            </div>
             <div class="table-container">
                 <table id="application-list-table">
                     <thead>
@@ -572,6 +606,9 @@
             </div>
 
             <h3>賀金 Info</h3>
+            <div class="export-buttons" style="margin-top: 20px;">
+                <button id="export-penalties-btn" class="export-btn">Export Penalties to Excel</button>
+            </div>
             <div class="table-container">
                 <table id="penalty-table">
                     <thead>
@@ -1377,20 +1414,18 @@
                     const employeePenalties = penalties.filter(penalty => penalty.employeeName === employeeName);
 
                     if (employeePenalties.length === 0) {
-                        const emptyRow = document.createElement('tr');
-                        emptyRow.innerHTML = `
-                            <td colspan="6" style="text-align: center;">No penalties found</td>
+                        employeePenaltyList.innerHTML = `
+                            <tr><td colspan="6" style="text-align: center;">No penalties found</td></tr>
                         `;
-                        employeePenaltyList.appendChild(emptyRow);
                         penaltySumElement.textContent = '0';
                         return;
                     }
 
                     employeePenalties.forEach((penalty, index) => {
                         const isPast = isPastDeadline(penalty.deadline);
-                        const finalAmount = isPast ? penalty.amount * 2 : penalty.amount;
+                        // Use cancelDouble flag here too
+                        const finalAmount = (isPast && !penalty.cancelDouble) ? penalty.amount * 2 : penalty.amount;
 
-                        // Add to total if not submitted
                         if (!penalty.submitted) {
                             totalPenalty += finalAmount;
                         }
@@ -1400,7 +1435,7 @@
                             <td>${penalty.date}</td>
                             <td>${penalty.reason}</td>
                             <td>${penalty.lateMinutes === 'No Show' ? 'No Show' : penalty.lateMinutes}</td>
-                            <td>$${finalAmount}${isPast ? ' (Doubled)' : ''}</td>
+                            <td>$${finalAmount}${(isPast && !penalty.cancelDouble) ? ' (Doubled)' : ''}</td>
                             <td>${penalty.deadline}</td>
                             <td>
                                 ${penalty.submitted ? 
@@ -1410,22 +1445,13 @@
                                 }
                             </td>
                         `;
-                        if (isPast) {
+                        if (isPast && !penalty.cancelDouble) {
                             newRow.style.backgroundColor = '#ffebee';
                         }
                         employeePenaltyList.appendChild(newRow);
                     });
 
-                    // Update the total display
                     penaltySumElement.textContent = totalPenalty;
-
-                    // Add event listeners to submit buttons
-                    document.querySelectorAll('.submit-proof-btn').forEach(button => {
-                        button.addEventListener('click', function() {
-                            const index = this.getAttribute('data-index');
-                            handleProofSubmission(employeeName, index);
-                        });
-                    });
                 }
             }
 
@@ -1468,38 +1494,43 @@
             }
 
             function refreshPenaltyTable(penalties) {
-            const penaltyList = document.getElementById('penalty-list');
-            penaltyList.innerHTML = '';
-            
-            penalties.forEach((penalty, index) => {
-                const isPast = isPastDeadline(penalty.deadline);
-                const finalAmount = isPast ? penalty.amount * 2 : penalty.amount;
+                const penaltyList = document.getElementById('penalty-list');
+                penaltyList.innerHTML = '';
                 
-                const newRow = document.createElement('tr');
-                newRow.innerHTML = `
-                    <td>${penalty.employeeName} ${penalty.role ? `(${penalty.role})` : ''}</td>
-                    <td>${penalty.date}</td>
-                    <td>${penalty.reason}</td>
-                    <td>${penalty.lateMinutes === 'No Show' ? 'No Show' : penalty.lateMinutes}</td>
-                    <td>$${finalAmount}${isPast ? ' (Doubled)' : ''}</td>
-                    <td>${penalty.deadline}</td>
-                    <td>
-                        ${penalty.submitted ? 
-                            `<span class="status-submitted">Submitted</span>
-                            <button class="view-proof-btn" onclick="viewProof('${penalty.proofImage}')">View Proof</button>
-                            <button class="reject-penalty-btn" data-index="${index}">Reject</button>` : 
-                            '<span class="status-not-submitted">Not Submitted</span>'
-                        }
-                        <button class="remove-penalty-btn" data-penalty-index="${index}">Remove</button>
-                    </td>
-                `;
-                if (isPast) {
-                    newRow.style.backgroundColor = '#ffebee';
-                }
-                penaltyList.appendChild(newRow);
-            });
-            createPagination('penalty-table');
-        }
+                penalties.forEach((penalty, index) => {
+                    const isPast = isPastDeadline(penalty.deadline);
+                    // Check if penalty has cancelDouble flag
+                    const finalAmount = (isPast && !penalty.cancelDouble) ? penalty.amount * 2 : penalty.amount;
+                    
+                    const newRow = document.createElement('tr');
+                    newRow.innerHTML = `
+                        <td>${penalty.employeeName} ${penalty.role ? `(${penalty.role})` : ''}</td>
+                        <td>${penalty.date}</td>
+                        <td>${penalty.reason}</td>
+                        <td>${penalty.lateMinutes === 'No Show' ? 'No Show' : penalty.lateMinutes}</td>
+                        <td>$${finalAmount}${(isPast && !penalty.cancelDouble) ? ' (Doubled)' : ''}</td>
+                        <td>${penalty.deadline}</td>
+                        <td>
+                            ${penalty.submitted ? 
+                                `<span class="status-submitted">Submitted</span>
+                                <button class="view-proof-btn" onclick="viewProof('${penalty.proofImage}')">View Proof</button>
+                                <button class="reject-penalty-btn" data-index="${index}">Reject</button>` : 
+                                '<span class="status-not-submitted">Not Submitted</span>'
+                            }
+                            ${isPast && !penalty.cancelDouble ? 
+                                `<button class="cancel-double-btn" data-index="${index}">Cancel Double</button>` : 
+                                ''
+                            }
+                            <button class="remove-penalty-btn" data-penalty-index="${index}">Remove</button>
+                        </td>
+                    `;
+                    if (isPast && !penalty.cancelDouble) {
+                        newRow.style.backgroundColor = '#ffebee';
+                    }
+                    penaltyList.appendChild(newRow);
+                });
+                createPagination('penalty-table');
+            }
 
             // Add function to view proof image
             function viewProof(proofImage) {
@@ -1544,20 +1575,17 @@
 
             // Add event listener for removing penalties
             document.addEventListener('click', function(event) {
-                if (event.target.classList.contains('remove-penalty-btn')) {
-                    if (confirm('Are you sure you want to remove this penalty?')) {
-                        const index = parseInt(event.target.getAttribute('data-penalty-index'));
+                if (event.target.classList.contains('cancel-double-btn')) {
+                    if (confirm('Are you sure you want to cancel the double penalty?')) {
+                        const index = parseInt(event.target.getAttribute('data-index'));
                         
                         // Get penalties from localStorage
                         const savedPenalties = localStorage.getItem('penaltyData');
                         if (savedPenalties) {
                             const penalties = JSON.parse(savedPenalties);
                             
-                            // Store the employee name before removing the penalty
-                            const employeeName = penalties[index].employeeName;
-                            
-                            // Remove the penalty
-                            penalties.splice(index, 1);
+                            // Set cancelDouble flag for this penalty
+                            penalties[index].cancelDouble = true;
                             
                             // Save updated penalties back to localStorage
                             localStorage.setItem('penaltyData', JSON.stringify(penalties));
@@ -1565,37 +1593,16 @@
                             // Refresh both admin and employee penalty tables
                             refreshPenaltyTable(penalties);
                             
-                            // If we're in employee view and this is the current employee's penalty list
+                            // If we're in employee view, update that too
                             const currentEmployeeName = document.getElementById('employee-name')?.textContent;
-                            if (currentEmployeeName === employeeName) {
-                                loadEmployeePenalties(employeeName);
-                            }
-                        }
-                    }
-                } else if (event.target.classList.contains('reject-penalty-btn')) {
-                    if (confirm('Are you sure you want to reject this penalty submission?')) {
-                        const index = parseInt(event.target.getAttribute('data-index'));
-                        
-                        const savedPenalties = localStorage.getItem('penaltyData');
-                        if (savedPenalties) {
-                            const penalties = JSON.parse(savedPenalties);
-                            const employeeName = penalties[index].employeeName;
-                            
-                            penalties[index].submitted = false;
-                            penalties[index].proofImage = null;
-                            
-                            localStorage.setItem('penaltyData', JSON.stringify(penalties));
-                            
-                            refreshPenaltyTable(penalties);
-                            
-                            const currentEmployeeName = document.getElementById('employee-name')?.textContent;
-                            if (currentEmployeeName === employeeName) {
-                                loadEmployeePenalties(employeeName);
+                            if (currentEmployeeName === penalties[index].employeeName) {
+                                loadEmployeePenalties(currentEmployeeName);
                             }
                         }
                     }
                 }
             });
+
 
             // Function for viewing proof images
             function viewProof(proofImage) {
@@ -2383,6 +2390,122 @@
 
             // Make sure to keep the existing window.load event listener
             window.addEventListener('load', initializePenaltySection);
+
+            // Add these functions to your JavaScript code
+            function exportToExcel(data, filename) {
+                // Convert data to worksheet
+                const ws = XLSX.utils.json_to_sheet(data);
+                
+                // Create workbook and add worksheet
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Sheet1");
+                
+                // Save file
+                XLSX.writeFile(wb, filename);
+            }
+
+            // Function to export applications
+            function exportApplications() {
+                const savedEmployeeData = localStorage.getItem('employeeData');
+                if (savedEmployeeData) {
+                    const employeeData = JSON.parse(savedEmployeeData);
+                    
+                    // Prepare data for export
+                    const exportData = [];
+                    
+                    employeeData.forEach(employee => {
+                        if (employee.applications) {
+                            employee.applications.forEach(application => {
+                                exportData.push({
+                                    'Agent Name': employee.name,
+                                    'Apply Date': application.applyDate,
+                                    'Leave Start Date': application.leaveStartDate,
+                                    'Leave End Date': application.leaveEndDate,
+                                    'Leave Type': application.leaveType,
+                                    'Status': application.status
+                                });
+                            });
+                        }
+                    });
+                    
+                    // Sort by date (newest first)
+                    exportData.sort((a, b) => {
+                        return new Date(b['Apply Date']) - new Date(a['Apply Date']);
+                    });
+                    
+                    // Export to Excel
+                    exportToExcel(exportData, 'leave_applications.xlsx');
+                }
+            }
+
+            // Function to export penalties
+            function exportPenalties() {
+                const savedPenalties = localStorage.getItem('penaltyData');
+                if (savedPenalties) {
+                    const penalties = JSON.parse(savedPenalties);
+                    
+                    // Prepare data for export
+                    const exportData = penalties.map(penalty => {
+                        const isPast = isPastDeadline(penalty.deadline);
+                        const finalAmount = (isPast && !penalty.cancelDouble) ? penalty.amount * 2 : penalty.amount;
+                        
+                        return {
+                            'Agent Name': penalty.employeeName,
+                            'Date': penalty.date,
+                            'Reason': penalty.reason,
+                            'Late Minutes': penalty.lateMinutes === 500 ? 'No Show' : penalty.lateMinutes,
+                            'Amount': `$${penalty.amount}`,
+                            'Final Amount': `$${finalAmount}`,
+                            'Deadline': penalty.deadline,
+                            'Status': penalty.submitted ? 'Submitted' : 'Not Submitted',
+                            'Double Cancelled': penalty.cancelDouble ? 'Yes' : 'No'
+                        };
+                    });
+                    
+                    // Sort by date (newest first)
+                    exportData.sort((a, b) => {
+                        return new Date(b.Date) - new Date(a.Date);
+                    });
+                    
+                    // Export to Excel
+                    exportToExcel(exportData, 'penalties.xlsx');
+                }
+            }
+
+            // Add event listeners for the export buttons
+            document.addEventListener('DOMContentLoaded', function() {
+                const exportApplicationsBtn = document.getElementById('export-applications-btn');
+                const exportPenaltiesBtn = document.getElementById('export-penalties-btn');
+                
+                if (exportApplicationsBtn) {
+                    exportApplicationsBtn.addEventListener('click', exportApplications);
+                }
+                
+                if (exportPenaltiesBtn) {
+                    exportPenaltiesBtn.addEventListener('click', exportPenalties);
+                }
+            });
+
+            // Add function to format date consistently
+            function formatExportDate(dateString) {
+                const date = new Date(dateString);
+                return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+            }
+
+            // Custom column width settings for better Excel display
+            function setExcelColumnWidths(ws) {
+                const columnWidths = [
+                    { wch: 15 }, // Agent Name
+                    { wch: 20 }, // Date/Apply Date
+                    { wch: 15 }, // Reason/Leave Type
+                    { wch: 12 }, // Late Minutes/Status
+                    { wch: 10 }, // Amount
+                    { wch: 12 }, // Final Amount
+                    { wch: 12 }, // Deadline/Status
+                ];
+                
+                ws['!cols'] = columnWidths;
+            }
 
         </script>
 
